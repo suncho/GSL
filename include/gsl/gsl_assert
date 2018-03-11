@@ -70,24 +70,37 @@ struct fail_fast : public std::logic_error
 };
 }
 
+#if __cplusplus >= 201703L || _MSVC_LANG >= 201703 || defined(__cpp_lib_uncaught_exceptions)
+#define GSL_UNCAUGHT_EXCEPTIONS std::uncaught_exceptions
+#else
+#define GSL_UNCAUGHT_EXCEPTIONS std::uncaught_exception
+#endif
+
 #if defined(GSL_THROW_ON_CONTRACT_VIOLATION)
+#define GSL_CONTRACT_FAIL(type) throw gsl::fail_fast(                                              \
+    "GSL: " type " failure at " __FILE__ ": " GSL_STRINGIFY(__LINE__))
+#elif defined(GSL_TERMINATE_ON_CONTRACT_VIOLATION)
+#define GSL_CONTRACT_FAIL(type) std::terminate()
+#endif
+
+#if defined(GSL_THROW_ON_CONTRACT_VIOLATION) || defined(GSL_TERMINATE_ON_CONTRACT_VIOLATION)
 
 #define GSL_CONTRACT_CHECK(type, cond)                                                             \
-    (GSL_LIKELY(cond) ? static_cast<void>(0)                                                       \
-                      : throw gsl::fail_fast("GSL: " type " failure at " __FILE__                  \
-                                             ": " GSL_STRINGIFY(__LINE__)))
+    (GSL_LIKELY(cond) || GSL_UNCAUGHT_EXCEPTIONS() ? static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
 
-#elif defined(GSL_TERMINATE_ON_CONTRACT_VIOLATION)
-
-#define GSL_CONTRACT_CHECK(type, cond) (GSL_LIKELY(cond) ? static_cast<void>(0) : std::terminate())
+// Same as above, but contract fails even when exiting via exception
+// Throwing in this case will call std::terminate
+#define GSL_CONTRACT_CHECK_ALWAYS(type, cond)                                                      \
+    (GSL_LIKELY(cond)                              ? static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
 
 #elif defined(GSL_UNENFORCED_ON_CONTRACT_VIOLATION)
 
-#define GSL_CONTRACT_CHECK(type, cond) GSL_ASSUME(cond)
+#define GSL_CONTRACT_CHECK(type, cond)        GSL_ASSUME(cond)
+#define GSL_CONTRACT_CHECK_ALWAYS(type, cond) GSL_ASSUME(cond)
 
 #endif
 
-#define Expects(cond) GSL_CONTRACT_CHECK("Precondition", cond)
+#define Expects(cond) GSL_CONTRACT_CHECK_ALWAYS("Precondition", cond)
 
 #if defined(GSL_UNENFORCED_ON_CONTRACT_VIOLATION)
 
@@ -96,23 +109,15 @@ struct fail_fast : public std::logic_error
 
 #else // GSL_UNENFORCED_ON_CONTRACT_VIOLATION
 
-#if __cplusplus >= 201703L || _MSVC_LANG >= 201703 || defined(__cpp_lib_uncaught_exceptions)
-#define GSL_UNCAUGHT_EXCEPTIONS std::uncaught_exceptions
-#else
-#define GSL_UNCAUGHT_EXCEPTIONS std::uncaught_exception
-#endif
-
 // Ensures uses an object that checks the condition on destruction
-// Setting `always` to true means we want the ensurer to trigger even when
-// exiting via exception (this will call std::terminate).
-template<class A, bool always> class gsl_ensurer {
+template<class A> class gsl_ensurer {
     gsl_ensurer           (const gsl_ensurer&) = delete;
     gsl_ensurer& operator=(const gsl_ensurer&) = delete;
     A& asserter;
 public:
     gsl_ensurer(A& a) : asserter(a) {}
     ~gsl_ensurer() noexcept(false)
-    { if (!GSL_UNCAUGHT_EXCEPTIONS() || always) asserter(); }
+    { asserter(); }
 };
 
 // Use line numbers to create unique names for each ensurer.
@@ -125,15 +130,15 @@ public:
     auto GSL_UNIQUE(GSL_ENSURER_) = [&]() {                                                        \
         GSL_CONTRACT_CHECK("Postcondition", cond);                                                 \
     };                                                                                             \
-    gsl_ensurer<decltype(GSL_UNIQUE(GSL_ENSURER_)), false>                                         \
+    gsl_ensurer<decltype(GSL_UNIQUE(GSL_ENSURER_))>                                                \
         GSL_UNIQUE(GSL_ENSURE_)(GSL_UNIQUE(GSL_ENSURER_));
 
 // Ensure even when exiting via exception.
 #define AlwaysEnsures(cond)                                                                        \
     auto GSL_UNIQUE(GSL_ENSURER_) = [&]() {                                                        \
-        GSL_CONTRACT_CHECK("Postcondition", cond);                                                 \
+        GSL_CONTRACT_CHECK_ALWAYS("Postcondition", cond);                                          \
     };                                                                                             \
-    gsl_ensurer<decltype(GSL_UNIQUE(GSL_ENSURER_)), true>                                          \
+    gsl_ensurer<decltype(GSL_UNIQUE(GSL_ENSURER_))>                                                \
         GSL_UNIQUE(GSL_ENSURE_)(GSL_UNIQUE(GSL_ENSURER_));
 
 #endif // GSL_UNENFORCED_ON_CONTRACT_VIOLATION
@@ -149,3 +154,4 @@ public:
     AlwaysEnsures(cond)                                                                            \
 
 #endif // GSL_CONTRACTS_H
+
