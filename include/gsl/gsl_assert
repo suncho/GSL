@@ -91,7 +91,7 @@ struct fail_fast : public std::logic_error
 // Same as above, but contract fails even when exiting via exception
 // Throwing in this case will call std::terminate
 #define GSL_CONTRACT_CHECK_ALWAYS(type, cond)                                                      \
-    (GSL_LIKELY(cond)                              ? static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
+    (GSL_LIKELY([&]() noexcept {return (cond);}()) ? static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
 
 #elif defined(GSL_UNENFORCED_ON_CONTRACT_VIOLATION)
 
