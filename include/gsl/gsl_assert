@@ -73,7 +73,7 @@ struct fail_fast : public std::logic_error
 #if __cplusplus >= 201703L || _MSVC_LANG >= 201703 || defined(__cpp_lib_uncaught_exceptions)
 #define GSL_UNCAUGHT_EXCEPTIONS std::uncaught_exceptions
 #else
-#define GSL_UNCAUGHT_EXCEPTIONS std::uncaught_exception
+#define GSL_UNCAUGHT_EXCEPTIONS static_cast<int>(std::uncaught_exception)
 #endif
 
 #if defined(GSL_THROW_ON_CONTRACT_VIOLATION)
@@ -86,12 +86,14 @@ struct fail_fast : public std::logic_error
 #if defined(GSL_THROW_ON_CONTRACT_VIOLATION) || defined(GSL_TERMINATE_ON_CONTRACT_VIOLATION)
 
 #define GSL_CONTRACT_CHECK(type, cond)                                                             \
-    (GSL_LIKELY(cond) || GSL_UNCAUGHT_EXCEPTIONS() ? static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
+    (GSL_LIKELY(cond) || GSL_UNCAUGHT_EXCEPTIONS() > GSL_UNIQUE(GSL_NUM_UNCAUGHT_) ?               \
+      static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
 
 // Same as above, but contract fails even when exiting via exception
 // Throwing in this case will call std::terminate
 #define GSL_CONTRACT_CHECK_ALWAYS(type, cond)                                                      \
-    (GSL_LIKELY([&]() noexcept {return (cond);}()) ? static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
+    (GSL_LIKELY([&]() noexcept {return (cond);}()) ?                                               \
+      static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
 
 #elif defined(GSL_UNENFORCED_ON_CONTRACT_VIOLATION)
 
@@ -127,6 +129,7 @@ public:
 
 // Ensure along all non-exception exit paths.
 #define Ensures(cond)                                                                              \
+    const int GSL_UNIQUE(GSL_NUM_UNCAUGHT_) = GSL_UNCAUGHT_EXCEPTIONS();                           \
     auto GSL_UNIQUE(GSL_ENSURER_) = [&]() {                                                        \
         GSL_CONTRACT_CHECK("Postcondition", cond);                                                 \
     };                                                                                             \
