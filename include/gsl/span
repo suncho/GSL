@@ -134,15 +134,27 @@ namespace details
 
         span_iterator() = default;
 
+    private:
         constexpr span_iterator(const Span* span, typename Span::index_type idx) noexcept
             : span_(span), index_(idx)
         {}
+    public:
 
-        friend span_iterator<Span, true>;
         template<bool B, std::enable_if_t<!B && IsConst>* = nullptr>
         constexpr span_iterator(const span_iterator<Span, B>& other) noexcept
             : span_iterator(other.span_, other.index_)
         {
+        }
+
+        friend Span;
+        friend span_iterator<Span, true>;
+
+        friend bool compatible(const span_iterator& lhs,
+                               const span_iterator& rhs)
+        {
+          return (!lhs.span_ && !rhs.span_)
+              || ( lhs.span_ &&  rhs.span_
+                && lhs.span_->data() == rhs.span_->data());
         }
 
         constexpr reference operator*() const
@@ -208,10 +220,7 @@ namespace details
 
         constexpr difference_type operator-(span_iterator rhs) const
         {
-            Expects( (!span_ && !rhs.span_)
-                  || ( span_ &&  rhs.span_ 
-                    && span_->data() == rhs.span_->data()));
-
+            Expects(compatible(*this, rhs));
             return index_ - rhs.index_;
         }
 
@@ -221,17 +230,14 @@ namespace details
         }
 
         constexpr friend bool operator==(span_iterator lhs,
-                                         span_iterator rhs) noexcept
+                                         span_iterator rhs)
         {
-            return ( (!lhs.span_ && !rhs.span_)
-                  || ( lhs.span_ &&  rhs.span_
-                    && lhs.span_->data() == rhs.span_->data()
-                    && lhs.span_->size() == rhs.span_->size()))
-                && lhs.index_ == rhs.index_;
+            Expects(compatible(lhs, rhs));
+            return lhs.index_ == rhs.index_;
         }
 
         constexpr friend bool operator!=(span_iterator lhs,
-                                         span_iterator rhs) noexcept
+                                         span_iterator rhs)
         {
             return !(lhs == rhs);
         }
@@ -239,10 +245,7 @@ namespace details
         constexpr friend bool operator<(span_iterator lhs,
                                         span_iterator rhs)
         {
-            Expects( (!lhs.span_ && !rhs.span_)
-                  || ( lhs.span_ &&  rhs.span_
-                    && lhs.span_->data() == rhs.span_->data()));
-
+            Expects(compatible(lhs, rhs));
             return lhs.index_ < rhs.index_;
         }
 
