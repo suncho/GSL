@@ -118,13 +118,15 @@ namespace details
 
 #endif
 
+    constexpr bool noexcept_test(bool cond) noexcept { return cond; }
+
 } // namespace details
 } // namespace gsl
 
 #if __cplusplus >= 201703L || _MSVC_LANG >= 201703 || defined(__cpp_lib_uncaught_exceptions)
 #define GSL_UNCAUGHT_EXCEPTIONS std::uncaught_exceptions
 #else
-#define GSL_UNCAUGHT_EXCEPTIONS static_cast<int>(std::uncaught_exception)
+inline int GSL_UNCAUGHT_EXCEPTIONS() { return std::uncaught_exceptions(); }
 #endif
 
 #if defined(GSL_THROW_ON_CONTRACT_VIOLATION)
@@ -142,9 +144,15 @@ namespace details
 
 // Same as above, but contract fails even when exiting via exception
 // Throwing in this case will call std::terminate
+#if __cplusplus >= 201703L || _MSVC_LANG >= 201703 || __cpp_constexpr >= 201603
 #define GSL_CONTRACT_CHECK_ALWAYS(type, cond)                                                      \
     (GSL_LIKELY([&]() noexcept {return (cond);}()) ?                                               \
       static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
+#else
+#define GSL_CONTRACT_CHECK_ALWAYS(type, cond)                                                      \
+    (GSL_LIKELY(cond) ?                                                                            \
+      static_cast<void>(0) : GSL_CONTRACT_FAIL(type))
+#endif
 
 #elif defined(GSL_UNENFORCED_ON_CONTRACT_VIOLATION)
 
